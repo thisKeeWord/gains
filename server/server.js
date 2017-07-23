@@ -1,13 +1,24 @@
 var express = require('express');
-var path = require('path');
 var app = express();
+var path = require('path');
+var bodyParser = require('body-parser');
+var User = require('./../database/userModel');
+var userController = require('./../database/userController');
+var mongoose = require('mongoose');
+var mongoURI = process.env.NODE_ENV === 'test1' ? 'mongodb://localhost/test1' : 'mongodb://localhost/gainsApp';
+mongoose.connect(mongoURI);
 
-app.use(express.static(path.join(__dirname, './../')));
+// decoding data as string for format for url
+app.use(bodyParser.urlencoded());
+app.use(express.static(path.join(__dirname, './../client/')));
 
-app.get('/', function(req,res) {
-  res.sendFile('/index.html');
-});
+app.get('/', function(req, res) {
+    res.sendFile('index.html');
+})
+app.post('/signup', userController.createUser);
+app.post('/login', userController.verifyUser);
 
-app.listen(3000, function() {
-  console.log('Server is listening on port 3000');
-});
+
+app.listen(3000);
+
+module.exports = app;

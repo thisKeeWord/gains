@@ -1,66 +1,57 @@
 var gulp = require('gulp');
-var browserify = require('browserify');
-var babelify = require('babelify');
-var watchify = require('watchify');
 var source = require('vinyl-source-stream');
-var notify = require('gulp-notify');
+var browserify = require('browserify');
+var watchify = require('watchify');
+var reactify = require('reactify');
 var nodemon = require('gulp-nodemon');
+var uglify = require('gulp-uglify');
+var babelify = require('babelify');
+var buffer = require('vinyl-buffer');
 
-function handleErrors() {
-  var args = Array.prototype.slice.call(arguments);
-  notify.onError({
-    title : 'Compile Error',
-    message : '<%= error.message %>'
-  }).apply(this, args);
-  //console.log('Compile error: ', args);
-  this.emit('end'); //keeps gulp from hanging on this task
-}
+gulp.task('browserify', scripts)
+    .task('serve', serve);
 
-function buildScript(file, watch) {
-  var props = {
-    entries : ['./components/' + file],
-    debug : true,
-    transform : babelify.configure({
-                presets: ["react", "es2015"]
-                })
-  };
+function scripts() {
+  var bundler = browserify({
+    entries: ['./client/components/App.js'],
+    transform: babelify.configure({ presets: ['react', 'es2015'] }),
+    debug: false,
+    cache: {},
+    packageCache: {},
+    fullPaths: false
+  });
+  var watcher = watchify(bundler);
 
-  //watchify if watch set to true. otherwise browserify once
-  var bundler = watch ? watchify(browserify(props)) : browserify(props);
-
-  function rebundle(){
-    var stream = bundler.bundle();
-    return stream
-      .on('error', handleErrors)
+  return watcher
+    .on('update', function() {
+      var updateStart = Date.now();
+      console.log('Updating!');
+      watcher.bundle()
+      .on('error', function(err) {
+        console.log('Error with compiling components', err.message);
+      })
       .pipe(source('bundle.js'))
-      .pipe(gulp.dest('./build/'));
-  }
-
-  bundler.on('update', function() {
-    var updateStart = Date.now();
-    rebundle();
-    console.log('Updated!', (Date.now() - updateStart) + 'ms');
-  })
-
-  // run it once the first time buildScript is called
-  return rebundle();
+      .pipe(buffer())
+      .pipe(uglify())
+      .pipe(gulp.dest('./client/build/'));
+      console.log('Updated!', (Date.now() - updateStart) + 'ms');
+    })
+    // Create the initial bundle when starting the task
+    .bundle()
+    .on('error', function(err) {
+      console.log('Error with compiling components', err.message);
+    })
+    .pipe(source('bundle.js'))
+    .pipe(buffer())
+    .pipe(uglify())
+    .pipe(gulp.dest('./client/build/'));
 }
 
-// run once
-gulp.task('scripts', function() {
-  return buildScript('App.js', false);
-});
-
-//run nodemon
-gulp.task('start', function() {
+function serve() {
   nodemon({
-    script: 'server/server.js',
-    ext: 'js html',
-    env: {'NODE_ENV': 'development'}
-  })
-});
+    script: './server/server.js',
+  });
+}
 
-// run 'scripts' task first, then watch for future changes
-gulp.task('default', ['scripts', 'start'], function() {
-  return buildScript('App.js', true);
-});
+
+gulp.task('default', ['browserify', 'serve']);
